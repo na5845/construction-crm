@@ -12,13 +12,46 @@ export default function Login({ onSwitchToSignUp }) {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // 1. התחברות ראשונית
+      const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
-      // ההתחברות הצליחה - ה-AuthContext יזהה את השינוי לבד ויעביר אותנו לאפליקציה
+      if (authError) throw authError;
+
+      // 2. משיכת נתוני הפרופיל כדי לדעת לאיזה ארגון המשתמש שייך
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // 3. בדיקת סטטוס הארגון (האם מאושר או בתוך 30 יום)
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .select('is_approved, created_at')
+        .eq('id', profile.organization_id)
+        .single();
+
+      if (orgError) throw orgError;
+
+      const signupDate = new Date(org.created_at);
+      const now = new Date();
+      const diffTime = Math.abs(now - signupDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      // לוגיקת החסימה: אם לא מאושר ידנית ועברו יותר מ-30 יום
+      if (!org.is_approved && diffDays > 30) {
+        await supabase.auth.signOut(); // ניתוק המשתמש
+        alert('תקופת הניסיון (30 יום) הסתיימה. נא ליצור קשר עם המנהל להסדרת התשלום והמשך שימוש.');
+        setLoading(false);
+        return;
+      }
+
+      // אם הכל תקין, ה-AuthContext יזהה את ה-Session ויעביר לדף הבית
     } catch (error) {
       alert('שגיאה בהתחברות: ' + error.message);
     } finally {
@@ -30,11 +63,11 @@ export default function Login({ onSwitchToSignUp }) {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4" dir="rtl">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6">
         <div className="text-center">
-          <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
-             <LogIn size={32} />
+          <div className="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <LogIn className="text-blue-600" size={32} />
           </div>
-          <h1 className="text-2xl font-black text-slate-800">התחברות למערכת</h1>
-          <p className="text-gray-500 text-sm mt-1">ניהול פרויקטים לקבלנים</p>
+          <h1 className="text-2xl font-bold text-gray-800">ברוך הבא</h1>
+          <p className="text-gray-500 mt-2">התחבר למערכת ניהול הפרויקטים</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -69,8 +102,13 @@ export default function Login({ onSwitchToSignUp }) {
           </button>
         </form>
 
-        <div className="text-center text-sm text-gray-500 border-t pt-4">
-          אין לך עדיין חשבון? <button onClick={onSwitchToSignUp} className="text-blue-600 font-bold hover:underline">הירשם כאן</button>
+        <div className="text-center pt-4 border-t">
+          <button 
+            onClick={onSwitchToSignUp}
+            className="text-blue-600 font-medium hover:underline"
+          >
+            אין לך חשבון? הירשם עכשיו
+          </button>
         </div>
       </div>
     </div>
