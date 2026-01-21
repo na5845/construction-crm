@@ -29,10 +29,11 @@ export default function Login({ onSwitchToSignUp }) {
 
       if (profileError) throw profileError;
 
-      // 3. בדיקת סטטוס הארגון (האם מאושר או בתוך 30 יום)
+      // 3. בדיקת סטטוס הארגון וימי הניסיון המוגדרים
+      // שינוי: הוספנו את trial_days לשליפה
       const { data: org, error: orgError } = await supabase
         .from('organizations')
-        .select('is_approved, created_at')
+        .select('is_approved, created_at, trial_days') 
         .eq('id', profile.organization_id)
         .single();
 
@@ -43,10 +44,14 @@ export default function Login({ onSwitchToSignUp }) {
       const diffTime = Math.abs(now - signupDate);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      // לוגיקת החסימה: אם לא מאושר ידנית ועברו יותר מ-30 יום
-      if (!org.is_approved && diffDays > 30) {
+      // הגדרת ימי הניסיון: אם לא הוגדר ב-DB, ברירת המחדל היא 30 יום (או 0 אם תרצה)
+      const allowedTrialDays = org.trial_days || 30;
+
+      // לוגיקת החסימה: אם לא מאושר ידנית ועבר מספר הימים המוגדר
+      if (!org.is_approved && diffDays > allowedTrialDays) {
         await supabase.auth.signOut(); // ניתוק המשתמש
-        alert('תקופת הניסיון (30 יום) הסתיימה. נא ליצור קשר עם המנהל להסדרת התשלום והמשך שימוש.');
+        // שינוי: הודעה מעודכנת עם מספר הטלפון
+        alert('תקופת הנסיון הסתיים אנא פנה למנהל המערכת בטלפון 0533153305');
         setLoading(false);
         return;
       }
