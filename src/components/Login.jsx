@@ -1,15 +1,17 @@
 ﻿import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Loader2, Mail, Lock, LogIn } from 'lucide-react';
+import { Loader2, Mail, Lock, LogIn, AlertCircle } from 'lucide-react'; // הוספנו AlertCircle
 
 export default function Login({ onSwitchToSignUp }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState(''); // State חדש להודעה המעוצבת
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(''); // איפוס הודעה בניסיון התחברות חדש
 
     try {
       // 1. התחברות ראשונית
@@ -20,7 +22,7 @@ export default function Login({ onSwitchToSignUp }) {
 
       if (authError) throw authError;
 
-      // 2. משיכת נתוני הפרופיל כדי לדעת לאיזה ארגון המשתמש שייך
+      // 2. משיכת נתוני הפרופיל
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('organization_id')
@@ -29,11 +31,10 @@ export default function Login({ onSwitchToSignUp }) {
 
       if (profileError) throw profileError;
 
-      // 3. בדיקת סטטוס הארגון וימי הניסיון המוגדרים
-      // שינוי: הוספנו את trial_days לשליפה
+      // 3. בדיקת סטטוס הארגון וימי הניסיון
       const { data: org, error: orgError } = await supabase
         .from('organizations')
-        .select('is_approved, created_at, trial_days') 
+        .select('is_approved, created_at, trial_days')
         .eq('id', profile.organization_id)
         .single();
 
@@ -43,22 +44,21 @@ export default function Login({ onSwitchToSignUp }) {
       const now = new Date();
       const diffTime = Math.abs(now - signupDate);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      // הגדרת ימי הניסיון: אם לא הוגדר ב-DB, ברירת המחדל היא 30 יום (או 0 אם תרצה)
+      
       const allowedTrialDays = org.trial_days || 30;
 
-      // לוגיקת החסימה: אם לא מאושר ידנית ועבר מספר הימים המוגדר
+      // לוגיקת החסימה
       if (!org.is_approved && diffDays > allowedTrialDays) {
-        await supabase.auth.signOut(); // ניתוק המשתמש
-        // שינוי: הודעה מעודכנת עם מספר הטלפון
-        alert('תקופת הנסיון הסתיים אנא פנה למנהל המערכת בטלפון 0533153305');
+        await supabase.auth.signOut();
+        // במקום alert, אנחנו מעדכנים את ה-State
+        setErrorMessage('תקופת הנסיון הסתיים אנא פנה למנהל המערכת בטלפון 0533153305');
         setLoading(false);
         return;
       }
 
-      // אם הכל תקין, ה-AuthContext יזהה את ה-Session ויעביר לדף הבית
+      // הצלחה - המעבר לדף הבית יתבצע אוטומטית ע"י ה-AuthContext
     } catch (error) {
-      alert('שגיאה בהתחברות: ' + error.message);
+      setErrorMessage('שגיאה בהתחברות: ' + (error.message === 'Invalid login credentials' ? 'פרטי התחברות שגויים' : error.message));
     } finally {
       setLoading(false);
     }
@@ -76,13 +76,23 @@ export default function Login({ onSwitchToSignUp }) {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
+          {/* תצוגת הודעת השגיאה המעוצבת */}
+          {errorMessage && (
+            <div className="bg-red-50 border-r-4 border-red-500 p-4 rounded-lg flex items-start gap-3 animate-pulse">
+              <AlertCircle className="text-red-500 shrink-0" size={20} />
+              <p className="text-red-800 text-sm font-semibold leading-relaxed">
+                {errorMessage}
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-bold text-gray-500 mb-1 block">אימייל</label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 text-gray-400" size={18} />
               <input 
                 type="email" required 
-                className="w-full p-3 pl-10 bg-gray-50 rounded-xl border border-gray-200 outline-none focus:border-blue-500"
+                className="w-full p-3 pl-10 bg-gray-50 rounded-xl border border-gray-200 outline-none focus:border-blue-500 text-right"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
@@ -95,14 +105,17 @@ export default function Login({ onSwitchToSignUp }) {
               <Lock className="absolute left-3 top-3 text-gray-400" size={18} />
               <input 
                 type="password" required 
-                className="w-full p-3 pl-10 bg-gray-50 rounded-xl border border-gray-200 outline-none focus:border-blue-500"
+                className="w-full p-3 pl-10 bg-gray-50 rounded-xl border border-gray-200 outline-none focus:border-blue-500 text-right"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
             </div>
           </div>
 
-          <button disabled={loading} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition-all flex justify-center shadow-lg shadow-blue-200">
+          <button 
+            disabled={loading} 
+            className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 transition-all flex justify-center shadow-lg shadow-blue-200 disabled:bg-blue-400"
+          >
             {loading ? <Loader2 className="animate-spin" /> : 'התחבר'}
           </button>
         </form>
