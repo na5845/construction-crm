@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react'; // הוספנו useEffect
 import { supabase } from '../supabaseClient';
 import { Loader2, Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 
@@ -7,6 +7,15 @@ export default function Login({ onSwitchToSignUp }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  // --- תוספת חדשה: בדיקת הודעות שמורות בטעינת הדף ---
+  useEffect(() => {
+    const savedError = localStorage.getItem('loginBlockError');
+    if (savedError) {
+      setErrorMessage(savedError);
+      localStorage.removeItem('loginBlockError'); // מנקה כדי שלא יופיע שוב ברענון הבא
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,7 +32,6 @@ export default function Login({ onSwitchToSignUp }) {
       });
 
       if (authError) throw authError;
-      console.log("משתמש התחבר בהצלחה, בודק ארגון...");
 
       // 2. משיכת נתוני הפרופיל
       const { data: profile, error: profileError } = await supabase
@@ -50,29 +58,32 @@ export default function Login({ onSwitchToSignUp }) {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       const allowedTrialDays = org.trial_days || 30;
 
-      console.log(`ימים שעברו: ${diffDays}, ימים מותרים: ${allowedTrialDays}, מאושר: ${org.is_approved}`);
-
-      // --- לוגיקת החסימה המתוקנת ---
+      // --- לוגיקת החסימה ---
       if (org.is_approved === false && diffDays > allowedTrialDays) {
-        console.log("חסימה הופעלה! מנתק מיד...");
+        console.log("חסימה הופעלה! שומר הודעה ומנתק...");
         
-        // שלב קריטי: מנתקים את המשתמש מיד כדי שהמערכת לא תחשוב שהוא מחובר
-        await supabase.auth.signOut();
+        const blockMsg = 'תקופת הנסיון הסתיימה. אנא פנה למנהל המערכת בטלפון 0533153305';
+        
+        // טריק: שומרים את השגיאה בזיכרון הדפדפן לפני הניתוק
+        localStorage.setItem('loginBlockError', blockMsg);
 
-        // זורקים שגיאה יזומה כדי להגיע ל-catch
-        throw new Error('תקופת הנסיון הסתיימה. אנא פנה למנהל המערכת בטלפון 0533153305');
+        // מנתקים את המשתמש (זה גורם לרענון הרכיב)
+        await supabase.auth.signOut();
+        
+        // עוצרים כאן הכל
+        setLoading(false);
+        return; 
       }
 
       console.log("הכל תקין, מעביר לדף הבית...");
-      // בשלב זה ה-AuthContext יזהה שהמשתמש מחובר (כי לא ניתקנו אותו) ויעביר אותו דף
+      // כאן המערכת תזהה לבד שהמשתמש מחובר ותעביר אותו
       
     } catch (error) {
       console.error("שגיאה בתהליך:", error.message);
-      // כאן ההודעה תוצג בתיבה האדומה בדיוק כמו שגיאת סיסמה
-      // הסרנו את הקידומת "שגיאה: " כדי שיראה נקי, או שתשאיר אותה אם תרצה
-      setErrorMessage(error.message.replace('Error: ', '')); 
+      setErrorMessage(error.message.replace('Error: ', ''));
       setLoading(false);
-    } 
+      // במקרה של שגיאה רגילה אנחנו לא רוצים לנתק, כי המשתמש לא הצליח להתחבר בכלל
+    }
   };
 
   return (
@@ -87,7 +98,6 @@ export default function Login({ onSwitchToSignUp }) {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* תצוגת הודעת השגיאה - תופיע כאן גם במקרה של חסימה */}
           {errorMessage && (
             <div className="bg-red-50 border-r-4 border-red-500 p-4 rounded-lg flex items-start gap-3 animate-pulse">
               <AlertCircle className="text-red-500 shrink-0" size={20} />
