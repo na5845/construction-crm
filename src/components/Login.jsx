@@ -1,12 +1,12 @@
 ﻿import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Loader2, Mail, Lock, LogIn, AlertCircle } from 'lucide-react'; // הוספנו AlertCircle
+import { Loader2, Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 
 export default function Login({ onSwitchToSignUp }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState(''); // State חדש להודעה המעוצבת
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -52,17 +52,26 @@ export default function Login({ onSwitchToSignUp }) {
 
       console.log(`ימים שעברו: ${diffDays}, ימים מותרים: ${allowedTrialDays}, מאושר: ${org.is_approved}`);
 
-      // לוגיקת החסימה
+      // --- לוגיקת החסימה המתוקנת ---
       if (org.is_approved === false && diffDays > allowedTrialDays) {
-        console.log("חסימה הופעלה! מבצע ניתוק...");
+        console.log("חסימה הופעלה! מציג הודעה וממתין לפני ניתוק...");
         
-        // חשוב: קודם נציג את ההודעה ורק אז ננתק
-        setErrorMessage('תקופת הנסיון הסתיים אנא פנה למנהל המערכת בטלפון 0533153305');
+        // הצגת ההודעה
+        setErrorMessage('תקופת הנסיון הסתיימה. אנא פנה למנהל המערכת בטלפון 0533153305');
         
-        // נתק את המשתמש מה-Session כדי שלא יוכל להמשיך
-        await supabase.auth.signOut();
-        
+        // עצירת הספינר כדי שיראו את ההודעה
         setLoading(false);
+
+        // השהייה של 5 שניות לפני שמבצעים ניתוק בפועל
+        // זה נותן למשתמש זמן לקרוא את ההודעה לפני שהמערכת מעיפה אותו
+        setTimeout(async () => {
+          console.log("מבצע ניתוק כעת...");
+          await supabase.auth.signOut();
+          // אופציונלי: לרענן את הדף כדי לוודא שהסטייט מתאפס לגמרי
+          // window.location.reload(); 
+        }, 5000);
+        
+        // חשוב: Return כדי שהפונקציה לא תמשיך למטה
         return;
       }
 
@@ -72,9 +81,9 @@ export default function Login({ onSwitchToSignUp }) {
     } catch (error) {
       console.error("שגיאה בתהליך:", error.message);
       setErrorMessage('שגיאה: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
+      setLoading(false); // במקרה של שגיאה רגילה, עוצרים מיד
+    } 
+    // הסרנו את ה-finally הגורף כדי לשלוט ידנית ב-loading במקרה של חסימה
   };
 
 
