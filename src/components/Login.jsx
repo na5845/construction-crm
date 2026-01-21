@@ -11,9 +11,11 @@ export default function Login({ onSwitchToSignUp }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMessage(''); // איפוס הודעה בניסיון התחברות חדש
+    setErrorMessage('');
 
     try {
+      console.log("מתחיל תהליך התחברות...");
+      
       // 1. התחברות ראשונית
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -21,6 +23,7 @@ export default function Login({ onSwitchToSignUp }) {
       });
 
       if (authError) throw authError;
+      console.log("משתמש התחבר בהצלחה, בודק ארגון...");
 
       // 2. משיכת נתוני הפרופיל
       const { data: profile, error: profileError } = await supabase
@@ -31,7 +34,7 @@ export default function Login({ onSwitchToSignUp }) {
 
       if (profileError) throw profileError;
 
-      // 3. בדיקת סטטוס הארגון וימי הניסיון
+      // 3. בדיקת סטטוס הארגון
       const { data: org, error: orgError } = await supabase
         .from('organizations')
         .select('is_approved, created_at, trial_days')
@@ -40,29 +43,40 @@ export default function Login({ onSwitchToSignUp }) {
 
       if (orgError) throw orgError;
 
+      // חישוב ימים
       const signupDate = new Date(org.created_at);
       const now = new Date();
       const diffTime = Math.abs(now - signupDate);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
       const allowedTrialDays = org.trial_days || 30;
 
+      console.log(`ימים שעברו: ${diffDays}, ימים מותרים: ${allowedTrialDays}, מאושר: ${org.is_approved}`);
+
       // לוגיקת החסימה
-      if (!org.is_approved && diffDays > allowedTrialDays) {
-        await supabase.auth.signOut();
-        // במקום alert, אנחנו מעדכנים את ה-State
+      if (org.is_approved === false && diffDays > allowedTrialDays) {
+        console.log("חסימה הופעלה! מבצע ניתוק...");
+        
+        // חשוב: קודם נציג את ההודעה ורק אז ננתק
         setErrorMessage('תקופת הנסיון הסתיים אנא פנה למנהל המערכת בטלפון 0533153305');
+        
+        // נתק את המשתמש מה-Session כדי שלא יוכל להמשיך
+        await supabase.auth.signOut();
+        
         setLoading(false);
         return;
       }
 
-      // הצלחה - המעבר לדף הבית יתבצע אוטומטית ע"י ה-AuthContext
+      console.log("הכל תקין, מעביר לדף הבית...");
+      // כאן ה-AuthContext יזהה שהמשתמש מחובר ויעביר אותו דף
+      
     } catch (error) {
-      setErrorMessage('שגיאה בהתחברות: ' + (error.message === 'Invalid login credentials' ? 'פרטי התחברות שגויים' : error.message));
+      console.error("שגיאה בתהליך:", error.message);
+      setErrorMessage('שגיאה: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4" dir="rtl">
