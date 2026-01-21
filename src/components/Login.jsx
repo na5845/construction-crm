@@ -54,38 +54,26 @@ export default function Login({ onSwitchToSignUp }) {
 
       // --- לוגיקת החסימה המתוקנת ---
       if (org.is_approved === false && diffDays > allowedTrialDays) {
-        console.log("חסימה הופעלה! מציג הודעה וממתין לפני ניתוק...");
+        console.log("חסימה הופעלה! מנתק מיד...");
         
-        // הצגת ההודעה
-        setErrorMessage('תקופת הנסיון הסתיימה. אנא פנה למנהל המערכת בטלפון 0533153305');
-        
-        // עצירת הספינר כדי שיראו את ההודעה
-        setLoading(false);
+        // שלב קריטי: מנתקים את המשתמש מיד כדי שהמערכת לא תחשוב שהוא מחובר
+        await supabase.auth.signOut();
 
-        // השהייה של 5 שניות לפני שמבצעים ניתוק בפועל
-        // זה נותן למשתמש זמן לקרוא את ההודעה לפני שהמערכת מעיפה אותו
-        setTimeout(async () => {
-          console.log("מבצע ניתוק כעת...");
-          await supabase.auth.signOut();
-          // אופציונלי: לרענן את הדף כדי לוודא שהסטייט מתאפס לגמרי
-          // window.location.reload(); 
-        }, 5000);
-        
-        // חשוב: Return כדי שהפונקציה לא תמשיך למטה
-        return;
+        // זורקים שגיאה יזומה כדי להגיע ל-catch
+        throw new Error('תקופת הנסיון הסתיימה. אנא פנה למנהל המערכת בטלפון 0533153305');
       }
 
       console.log("הכל תקין, מעביר לדף הבית...");
-      // כאן ה-AuthContext יזהה שהמשתמש מחובר ויעביר אותו דף
+      // בשלב זה ה-AuthContext יזהה שהמשתמש מחובר (כי לא ניתקנו אותו) ויעביר אותו דף
       
     } catch (error) {
       console.error("שגיאה בתהליך:", error.message);
-      setErrorMessage('שגיאה: ' + error.message);
-      setLoading(false); // במקרה של שגיאה רגילה, עוצרים מיד
+      // כאן ההודעה תוצג בתיבה האדומה בדיוק כמו שגיאת סיסמה
+      // הסרנו את הקידומת "שגיאה: " כדי שיראה נקי, או שתשאיר אותה אם תרצה
+      setErrorMessage(error.message.replace('Error: ', '')); 
+      setLoading(false);
     } 
-    // הסרנו את ה-finally הגורף כדי לשלוט ידנית ב-loading במקרה של חסימה
   };
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4" dir="rtl">
@@ -99,7 +87,7 @@ export default function Login({ onSwitchToSignUp }) {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* תצוגת הודעת השגיאה המעוצבת */}
+          {/* תצוגת הודעת השגיאה - תופיע כאן גם במקרה של חסימה */}
           {errorMessage && (
             <div className="bg-red-50 border-r-4 border-red-500 p-4 rounded-lg flex items-start gap-3 animate-pulse">
               <AlertCircle className="text-red-500 shrink-0" size={20} />
