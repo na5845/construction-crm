@@ -8,12 +8,12 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // פונקציית חירום לניקוי
+  // פונקציית יציאה יזומה
   const forceLogout = async () => {
     try {
         await supabase.auth.signOut();
     } catch (e) { console.error(e); }
-    localStorage.clear();
+    localStorage.clear(); // מחיקה מוחלטת
     setUser(null);
     setProfile(null);
     setLoading(false);
@@ -23,20 +23,17 @@ export function AuthProvider({ children }) {
     console.log("🔍 Fetching profile for:", userId);
     
     try {
-      // יצירת הבקשה לדאטה-בייס
       const queryPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      // יצירת טיימר של 4 שניות
+      // תיקון: הארכת זמן ההמתנה מ-4 ל-15 שניות (קריטי למובייל)
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("DB_TIMEOUT")), 4000)
+        setTimeout(() => reject(new Error("DB_TIMEOUT")), 15000)
       );
 
-      // תחרות: מי מסיים קודם? הבקשה או הטיימר?
-      // זה מונע את המצב שהאתר נתקע לנצח
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
       
       if (error) throw error;
@@ -46,14 +43,15 @@ export function AuthProvider({ children }) {
         setProfile(data);
         return true;
       } else {
-        console.warn("⚠️ User has no profile. Logging out.");
-        throw new Error("No Profile");
+        console.warn("⚠️ User has no profile.");
+        // ביטלתי את הניתוק האוטומטי כאן כדי למנוע לופים של יציאה
+        return false; 
       }
 
     } catch (err) {
       console.error("❌ Profile Fetch Error:", err.message);
-      // אם זה טיימר או שגיאה קריטית - ננתק
-      await forceLogout();
+      // תיקון קריטי: לא לנתק את המשתמש אם יש בעיית אינטרנט רגעית!
+      // במקום forceLogout, אנחנו רק מפסיקים את הטעינה
       return false;
     }
   };
@@ -61,13 +59,11 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
-    // פונקציה אחת שמנהלת את הכל
     const handleSession = async (session) => {
         if (session?.user) {
-            // רק אם אנחנו לא כבר טעונים עם אותו משתמש
+            setUser(session.user); // קודם כל נשמור את המשתמש כדי שלא ירצד
             if (user?.id !== session.user.id) {
-                const success = await fetchProfile(session.user.id);
-                if (success && mounted) setUser(session.user);
+                await fetchProfile(session.user.id);
             }
         } else {
             setUser(null);
@@ -81,7 +77,7 @@ export function AuthProvider({ children }) {
         handleSession(session);
     });
 
-    // האזנה לשינויים (כולל Refresh)
+    // האזנה לשינויים
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         handleSession(session);
     });
@@ -90,10 +86,10 @@ export function AuthProvider({ children }) {
         mounted = false;
         subscription.unsubscribe();
     };
-  }, []); // רוץ פעם אחת בלבד
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, orgId: profile?.organization_id, loading }}>
+    <AuthContext.Provider value={{ user, profile, orgId: profile?.organization_id, loading, forceLogout }}>
       {children}
     </AuthContext.Provider>
   );
